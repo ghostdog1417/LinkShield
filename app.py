@@ -1,259 +1,172 @@
 from __future__ import annotations
 
-import textwrap
-import re
 from io import StringIO
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
-from fake_link_detector.detector import analyze_many, analyze_url, train_detector
+from fake_link_detector.detector import (
+    FEATURE_COLUMNS,
+    analyze_url,
+    build_demo_dataframe,
+    build_feature_frame,
+    clean_dataset,
+    get_model_registry,
+    load_project_dataset,
+    train_detector,
+    train_pipeline,
+)
 
 
 st.set_page_config(
-    page_title="Fake Link Detector",
-    page_icon="link",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    page_title="LinkShield CA-2 Dashboard",
+    page_icon="shield",
+    layout="centered",
 )
 
 
-@st.cache_resource(show_spinner="Training the URL detector...")
-def load_model():
-    return train_detector()
+@st.cache_data(show_spinner=False)
+def load_default_dataset() -> pd.DataFrame:
+    return build_demo_dataframe(size=2000, seed=42)
 
 
-MODEL = load_model()
+@st.cache_resource(show_spinner=False)
+def load_live_url_model():
+    return train_detector(seed=42)
 
 
-SAMPLES = [
-    "https://github.com/security",
-    "https://support.google.com/mail",
-    "http://verify-paypa1-login.zip/account/update?token=ab12cd34",
-    "https://secure.apple.com-billing.quest/login/confirm",
-    "https://docs.python.org/3/library/",
-]
+def load_uploaded_dataset(uploaded_file) -> pd.DataFrame:
+    raw = uploaded_file.getvalue().decode("utf-8", errors="ignore")
+    if uploaded_file.name.lower().endswith(".tsv"):
+        frame = pd.read_csv(StringIO(raw), sep="\t")
+    else:
+        frame = pd.read_csv(StringIO(raw))
+    return load_project_dataset(frame)
 
 
-def parse_pasted_links(raw_text: str) -> list[str]:
-    candidates = [part.strip() for part in re.split(r"[\n,\s]+", raw_text) if part.strip()]
-    links: list[str] = []
-
-    for candidate in candidates:
-        if candidate.startswith(("http://", "https://")):
-            links.append(candidate)
-        elif "." in candidate and "@" not in candidate:
-            links.append("https://" + candidate)
-
-    return links
-
-
-def parse_uploaded_links(uploaded_file) -> list[str]:
-    if uploaded_file is None:
-        return []
-
-    raw_text = uploaded_file.getvalue().decode("utf-8", errors="ignore")
-    if not raw_text.strip():
-        return []
-
-    if uploaded_file.name.lower().endswith((".csv", ".tsv")):
-        try:
-            frame = pd.read_csv(StringIO(raw_text), dtype=str, keep_default_na=False)
-            cells = frame.astype(str).fillna("").values.flatten().tolist()
-            return parse_pasted_links("\n".join(cells))
-        except Exception:
-            pass
-
-    return parse_pasted_links(raw_text)
+def render_heatmap(frame: pd.DataFrame):
+    corr = frame.corr(numeric_only=True)
+    fig, ax = plt.subplots(figsize=(9, 5))
+    im = ax.imshow(corr, cmap="YlOrRd", interpolation="nearest")
+    ax.set_xticks(range(len(corr.columns)))
+    ax.set_yticks(range(len(corr.index)))
+    ax.set_xticklabels(corr.columns, rotation=45, ha="right", fontsize=8)
+    ax.set_yticklabels(corr.index, fontsize=8)
+    ax.set_title("Correlation Heatmap")
+    fig.colorbar(im, ax=ax, fraction=0.03, pad=0.03)
+    st.pyplot(fig)
 
 
-def merge_links(*groups: list[str]) -> list[str]:
-    merged: list[str] = []
-    seen: set[str] = set()
-
-    for group in groups:
-        for link in group:
-            normalized = link.strip()
-            if normalized and normalized not in seen:
-                seen.add(normalized)
-                merged.append(normalized)
-
-    return merged
-
-
-st.markdown(
-    """
-    <style>
-    .stApp {
-        background:
-            radial-gradient(circle at top left, rgba(35, 82, 124, 0.28), transparent 28%),
-            radial-gradient(circle at top right, rgba(192, 93, 54, 0.22), transparent 24%),
-            linear-gradient(180deg, #07111f 0%, #0d1726 45%, #111a2a 100%);
-        color: #ecf2ff;
-    }
-    .block-container {
-        padding-top: 1.5rem;
-        padding-bottom: 2rem;
-    }
-    .hero {
-        padding: 1.4rem 1.5rem;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 24px;
-        background: linear-gradient(135deg, rgba(14, 29, 48, 0.9), rgba(22, 39, 63, 0.72));
-        box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
-        margin-bottom: 1.4rem;
-    }
-    .hero h1 {
-        margin: 0;
-        font-size: 3rem;
-        line-height: 1.05;
-    }
-    .hero p {
-        margin-top: 0.6rem;
-        color: rgba(236, 242, 255, 0.78);
-        max-width: 62ch;
-        font-size: 1.02rem;
-    }
-    .metric-card {
-        padding: 1rem 1.1rem;
-        border-radius: 18px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        height: 100%;
-    }
-    .metric-label {
-        font-size: 0.78rem;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: rgba(236, 242, 255, 0.58);
-    }
-    .metric-value {
-        font-size: 2rem;
-        font-weight: 700;
-        margin-top: 0.2rem;
-    }
-    .pill {
-        display: inline-block;
-        padding: 0.28rem 0.62rem;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        margin: 0.2rem 0.28rem 0.2rem 0;
-        font-size: 0.85rem;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-st.markdown(
-    """
-    <div class="hero">
-        <h1>Fake Link Detector</h1>
-        <p>
-            Paste a URL or a batch of links to score them with a lightweight machine learning model.
-            The dashboard highlights risky patterns like fake subdomains, suspicious TLDs, and phishing-style paths.
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
+st.title("LinkShield: ANN & ML CA-2 Exhibition")
+st.caption("Simple and stable pipeline demo: input, EDA, cleaning, feature selection, split, training, K-fold, metrics, and live URL prediction.")
 
 with st.sidebar:
-    st.header("Controls")
-    selected_sample = st.selectbox("Load a sample URL", ["Custom"] + SAMPLES)
-    st.caption("Use the samples to see how the detector behaves on safe and suspicious links.")
-    st.markdown("### Sample signals")
-    st.markdown("<span class='pill'>brand spoofing</span><span class='pill'>IP hosts</span><span class='pill'>random tokens</span><span class='pill'>odd TLDs</span>", unsafe_allow_html=True)
+    st.header("Run Configuration")
+    test_size = st.slider("Test set ratio", min_value=0.1, max_value=0.4, value=0.2, step=0.05)
+    feature_k = st.slider("Number of selected features", min_value=4, max_value=len(FEATURE_COLUMNS), value=8, step=1)
+    folds = st.slider("K-Fold splits", min_value=3, max_value=10, value=5, step=1)
+    selected_model = st.selectbox("Model Selection", options=list(get_model_registry().keys()))
+    remove_outliers = st.checkbox("Apply IQR outlier removal", value=True)
 
 
-col_left, col_right = st.columns([1.2, 0.8], gap="large")
+uploaded = st.file_uploader("Upload dataset (.csv/.tsv) with columns: url, label (0=safe, 1=fake)", type=["csv", "tsv"])
 
-with col_left:
-    st.subheader("Single link analysis")
-    default_url = selected_sample if selected_sample != "Custom" else "https://example.com/security"
-    url_input = st.text_area("URL", value=default_url, height=90, placeholder="https://example.com/login")
-    analyze_button = st.button("Analyze URL", type="primary")
+if uploaded is not None:
+    try:
+        raw_data = load_uploaded_dataset(uploaded)
+        data_source = f"Uploaded file: {uploaded.name}"
+    except Exception as err:
+        st.error(f"Unable to parse uploaded data: {err}")
+        raw_data = load_default_dataset()
+        data_source = "Fallback synthetic dataset"
+else:
+    raw_data = load_default_dataset()
+    data_source = "Built-in synthetic phishing dataset"
 
-    if analyze_button:
-        result = analyze_url(url_input, MODEL)
-        score_pct = round(result.score * 100, 1)
-        st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-label">Verdict</div>
-                <div class="metric-value">{result.label}</div>
-                <div style="margin-top:0.35rem; color: rgba(236,242,255,0.82);">Risk score: {score_pct}%</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+
+cleaned_data, cleaning_report = clean_dataset(raw_data, remove_outliers=remove_outliers)
+features_df = build_feature_frame(cleaned_data["url"]) if not cleaned_data.empty else pd.DataFrame(columns=FEATURE_COLUMNS)
+
+if "trained_bundle" not in st.session_state:
+    st.session_state.trained_bundle = None
+
+st.subheader("1) Input Data")
+st.write(f"Data source: **{data_source}**")
+st.write(f"Rows: **{len(raw_data)}**")
+st.dataframe(raw_data.head(15), width="stretch")
+
+st.subheader("2) EDA")
+if cleaned_data.empty:
+    st.warning("No rows available after cleaning.")
+else:
+    class_counts = cleaned_data["label"].value_counts().rename(index={0: "Safe", 1: "Fake"})
+    st.bar_chart(class_counts)
+    st.dataframe(features_df.describe().T, width="stretch")
+    render_heatmap(features_df)
+
+st.subheader("3) Data Engineering & Cleaning")
+st.dataframe(pd.DataFrame([cleaning_report]), width="stretch", hide_index=True)
+st.write(f"Rows after cleaning: **{len(cleaned_data)}**")
+
+st.subheader("4) Feature Selection, Split, Model Selection, Training")
+st.write(f"Model: **{selected_model}** | Test size: **{test_size}** | Top-K features: **{feature_k}** | K-Fold: **{folds}**")
+
+if st.button("Train and Evaluate Pipeline", type="primary"):
+    if cleaned_data.empty or len(cleaned_data["label"].unique()) < 2:
+        st.error("Training requires non-empty data with both classes (0 and 1).")
+    else:
+        st.session_state.trained_bundle = train_pipeline(
+            cleaned_data,
+            model_name=selected_model,
+            test_size=test_size,
+            feature_k=feature_k,
+            folds=folds,
         )
-        st.progress(result.score)
 
-        if result.reasons:
-            st.markdown("**Why it was flagged**")
-            for reason in result.reasons:
-                st.write(f"- {reason}")
+bundle = st.session_state.trained_bundle
 
-        feature_frame = pd.DataFrame(
-            [
-                {
-                    "host": result.features.get("host", ""),
-                    "path": result.features.get("path", ""),
-                    "scheme": result.features.get("scheme", ""),
-                    "subdomains": result.features.get("subdomain_count", 0),
-                    "digits": result.features.get("digit_count", 0),
-                    "hyphens": result.features.get("hyphen_count", 0),
-                    "url_length": result.features.get("url_length", 0),
-                }
-            ]
-        )
-        st.dataframe(feature_frame, use_container_width=True, hide_index=True)
+if bundle is None:
+    st.info("Click 'Train and Evaluate Pipeline' to run model training.")
+else:
+    st.success(f"Training complete using {bundle.model_name}")
+    st.write(f"Train rows: **{bundle.train_size}** | Test rows: **{bundle.test_size}**")
 
-with col_right:
-    st.subheader("Batch scan")
-    batch_text = st.text_area(
-        "Paste links separated by commas, spaces, or new lines",
-        value="\n".join(SAMPLES[:3]),
-        height=180,
-        help="Paste multiple links and detect them together.",
+    st.subheader("5) Feature Selection")
+    st.dataframe(bundle.feature_scores, width="stretch")
+    st.write("Selected features: " + ", ".join(bundle.selected_features))
+
+    st.subheader("6) K-Fold Validation")
+    kfold_df = pd.DataFrame([bundle.kfold_scores]).rename(
+        columns={
+            "accuracy": "cv_accuracy",
+            "precision": "cv_precision",
+            "recall": "cv_recall",
+            "f1": "cv_f1",
+        }
     )
-    uploaded_links_file = st.file_uploader(
-        "Or upload a .txt, .csv, or .tsv file",
-        type=["txt", "csv", "tsv"],
-        help="Each row can contain a URL, or a CSV column can hold one or more URLs.",
-    )
+    st.dataframe(kfold_df, width="stretch", hide_index=True)
 
-    if st.button("Detect pasted links"):
-        pasted_links = parse_pasted_links(batch_text)
-        uploaded_links = parse_uploaded_links(uploaded_links_file)
-        batch_results = analyze_many(merge_links(pasted_links, uploaded_links), MODEL)
-        if batch_results:
-            df = pd.DataFrame(
-                [
-                    {
-                        "url": item.url,
-                        "score": round(item.score, 3),
-                        "verdict": item.label,
-                    }
-                    for item in batch_results
-                ]
-            ).sort_values("score", ascending=False)
-            st.caption(f"Scanned {len(batch_results)} unique link(s).")
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            st.bar_chart(df.set_index("url")[["score"]])
-        else:
-            st.info("Paste or upload at least one valid link to scan.")
+    st.subheader("7) Performance Metrics")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Accuracy", f"{bundle.metrics.accuracy:.3f}")
+        st.metric("Precision", f"{bundle.metrics.precision:.3f}")
+    with col2:
+        st.metric("Recall", f"{bundle.metrics.recall:.3f}")
+        st.metric("F1 Score", f"{bundle.metrics.f1_score:.3f}")
 
-    st.markdown("### What the model looks for")
-    insight_text = textwrap.dedent(
-        """
-        - brand-like words mixed with unrelated domains
-        - plain HTTP and IP-based hosts
-        - long random paths and tracking parameters
-        - suspicious TLDs and stacked subdomains
-        """
-    ).strip()
-    st.markdown(insight_text)
+st.subheader("8) Live URL Inference")
+st.caption("Simple real-time demo for your exhibition.")
+live_model = load_live_url_model()
+sample_url = st.text_input("Enter URL", value="https://secure-paypa1-login.zip/account/verify")
+if st.button("Analyze URL"):
+    result = analyze_url(sample_url, live_model)
+    st.write(f"Verdict: **{result.label}**")
+    st.write(f"Risk score: **{result.score:.3f}**")
+    st.progress(float(result.score))
+    for reason in result.reasons:
+        st.write(f"- {reason}")
+
+    preview = build_feature_frame([sample_url])
+    st.dataframe(preview, width="stretch")
