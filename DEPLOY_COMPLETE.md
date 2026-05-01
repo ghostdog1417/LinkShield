@@ -78,6 +78,7 @@ Railway should auto-detect these, but verify:
 2. Click the **backend** service
 3. Go to **Variables** tab
 4. Add:
+
    ```
    FLASK_ENV=production
    FLASK_DEBUG=False
