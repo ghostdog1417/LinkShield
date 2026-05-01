@@ -127,6 +127,8 @@ In the configuration screen:
 **Build Command**: `npm run build`  
 **Output Directory**: `build`
 
+If Railway or your hosting panel asks for the port your backend listens on, use `5000`. The Flask app is configured to bind to Railway's runtime `PORT` value when available, with `5000` as the local fallback.
+
 ### Step 4: Add Environment Variable
 
 **IMPORTANT**: Before deploying, add your Railway backend URL!
