@@ -1,0 +1,105 @@
+.eda-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.eda-header {
+  margin-bottom: 40px;
+}
+
+.eda-header h1 {
+  font-size: 32px;
+  margin-bottom: 8px;
+  color: var(--accent);
+}
+
+.eda-header p {
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.eda-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  color: var(--text-secondary);
+  font-size: 18px;
+}
+
+.eda-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 24px;
+}
+
+.eda-card {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.eda-card.full-width {
+  grid-column: 1 / -1;
+}
+
+.eda-card h2 {
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.distribution-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.distribution-item {
+  display: grid;
+  grid-template-columns: 100px 1fr 80px;
+  align-items: center;
+  gap: 16px;
+}
+
+.distribution-item span:first-child {
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.bar-container {
+  background-color: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+  height: 24px;
+}
+
+.bar {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.bar.safe {
+  background-color: var(--success);
+}
+
+.bar.suspicious {
+  background-color: var(--danger);
+}
+
+.count {
+  text-align: right;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .eda-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .distribution-item {
+    grid-template-columns: 60px 1fr 60px;
+    font-size: 14px;
+  }
+}

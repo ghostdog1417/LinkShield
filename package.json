@@ -1,0 +1,20 @@
+{
+  "name": "LinkShield",
+  "version": "1.0.0",
+  "description": "Fake Link Detection Platform using React & Flask",
+  "author": "Your Name",
+  "license": "MIT",
+  "private": true,
+  "directories": {
+    "frontend": "./frontend",
+    "backend": "./backend"
+  },
+  "scripts": {
+    "frontend:install": "cd frontend && npm install",
+    "frontend:start": "cd frontend && npm start",
+    "frontend:build": "cd frontend && npm run build",
+    "backend:install": "cd backend && pip install -r requirements.txt",
+    "backend:start": "cd backend && python app.py",
+    "dev": "concurrently \"npm run backend:start\" \"npm run frontend:start\""
+  }
+}

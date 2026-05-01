@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm run build",
+  "env": {
+    "REACT_APP_API_URL": "@backend-api-url"
+  }
+}
